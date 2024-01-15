@@ -4,11 +4,12 @@ import System.IO (readFile')
 import System.Environment (getArgs)
 import System.Exit
 import GHC.GHCi.Helpers (flushAll)
+import MyLib
 
 readInput :: String -> IO ()
 readInput path = do
   contents <- readFile' path
-  print contents
+  run contents
 
 runPrompt :: IO ()
 runPrompt = do
@@ -16,7 +17,7 @@ runPrompt = do
   flushAll
   contents <- getContents
   let inputLines = lines contents
-  mapM_ (\line -> putStr (line ++ "\n>> ") >> flushAll) inputLines
+  mapM_ (\line -> run line >> putStr "\n>> " >> flushAll) inputLines
 
 main :: IO ()
 main = do
