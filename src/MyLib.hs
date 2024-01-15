@@ -92,7 +92,6 @@ data LoxError = LoxError
   }
   deriving (Read, Show, Eq)
 
-
 scanToken :: State InputState (Either LoxError Token)
 scanToken = do
   c <- advance
@@ -100,7 +99,7 @@ scanToken = do
   let line = inputLine $ inputPos state
   return $ scan state c line
   where
-    scan state c line = do 
+    scan state c line = do
       tokenType <- case c of
         '(' -> Right LeftParen
         ')' -> Right RightParen
