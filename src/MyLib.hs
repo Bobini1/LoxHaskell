@@ -1,14 +1,18 @@
+{-# LANGUAGE LambdaCase #-}
+
 module MyLib (run) where
 
-import Control.Monad
 import Control.Monad.State
-import Data.HashMap.Lazy (HashMap, empty)
 
 run :: String -> IO ()
 run str = do
-  case fst $ runState scanToken (defaultInput str) of
-    Left err -> print err
-    Right token -> print token
+  let results = evalState scanTokens (defaultInput str)
+  mapM_
+    ( \case
+        Left err -> print err
+        Right token -> print token
+    )
+    results
 
 data TokenType
   = LeftParen
@@ -36,7 +40,7 @@ data TokenType
   | And
   | Class
   | Else
-  | False
+  | BFalse
   | Fun
   | For
   | If
@@ -46,7 +50,7 @@ data TokenType
   | Return
   | Super
   | This
-  | True
+  | BTrue
   | Var
   | While
   | Eof
@@ -113,3 +117,16 @@ scanToken = do
         '*' -> Right Star
         _ -> Left $ LoxError line "Unexpected character."
       return $ createToken state tokenType
+
+scanTokens :: State InputState [Either LoxError Token]
+scanTokens = do
+  loop False []
+  where
+    loop over tokens = do
+      if over
+        then return tokens
+        else do
+          token <- scanToken
+          state <- get
+          loop (isOver state) (token : tokens)
+    isOver state = length (source state) <= current (inputPos state)
