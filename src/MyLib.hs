@@ -4,6 +4,7 @@ module MyLib (run) where
 
 import Control.Monad.Except
 import Control.Monad.State
+import Data.Char (isDigit)
 
 run :: String -> IO ()
 run str =
@@ -37,8 +38,8 @@ data TokenType
   | Less
   | LessEqual
   | Identifier
-  | String
-  | Number
+  | SString String
+  | Number Double
   | And
   | Class
   | Else
@@ -56,12 +57,11 @@ data TokenType
   | Var
   | While
   | Eof
-  deriving (Read, Show, Enum, Eq, Ord)
+  deriving (Read, Show, Eq, Ord)
 
 data Token = Token
   { tokenType :: TokenType,
     lexeme :: String,
-    literal :: String,
     line :: Int
   }
   deriving (Read, Show, Eq)
@@ -87,10 +87,26 @@ advance = do
   put $ InputState source (InputPos start (current + 1) inputLine)
   return $ source !! current
 
+advanceWhile :: (Char -> Bool) -> State InputState ()
+advanceWhile predicate = do
+  s <- get
+  if isOver s || not (predicate $ peek s)
+    then return ()
+    else do
+      when
+        (peek s == '\n')
+        (modify $ \s -> s {inputPos = (inputPos s) {inputLine = inputLine (inputPos s) + 1}})
+      _ <- advance
+      advanceWhile predicate
+
+currentLexeme :: InputState -> String
+currentLexeme (InputState source (InputPos start current _)) =
+  take (current - start) $ drop start source
+
 createToken :: InputState -> TokenType -> Token
-createToken (InputState source (InputPos start current inputLine)) tokenType = Token tokenType text "" inputLine
-  where
-    text = take (current - start) $ drop start source
+createToken inputState@(InputState source (InputPos start current inputLine)) tokenType =
+  let text = currentLexeme inputState
+   in Token tokenType text inputLine
 
 data LoxError = LoxError
   { sourceLine :: Int,
@@ -100,7 +116,31 @@ data LoxError = LoxError
 
 type TokenResult = ExceptT LoxError Maybe Token
 
--- type TokenResult = MaybeT (Either LoxError) Token
+parseString :: State InputState (ExceptT LoxError Maybe TokenType)
+parseString = do
+  _ <- advanceWhile (/= '"')
+  eof <- gets isOver
+  line <- gets $ inputLine . inputPos
+  if eof
+    then return $ throwError (LoxError line "Unterminated string.")
+    else do
+      _ <- advance
+      lexeme <- gets currentLexeme
+      return . lift . return $ SString (drop 1 $ take (length lexeme - 1) lexeme)
+
+parseDigit :: State InputState (ExceptT LoxError Maybe TokenType)
+parseDigit = do
+  _ <- advanceWhile isDigit
+  c <- gets peek
+  n <- gets peekNext
+  when
+    (c == '.' && isDigit n)
+    ( do
+        _ <- advance
+        advanceWhile isDigit
+    )
+  lexeme <- gets currentLexeme
+  return . lift . return $ Number (read lexeme)
 
 scanToken :: State InputState TokenResult
 scanToken = do
@@ -134,7 +174,24 @@ scanToken = do
         do
           equals <- match '='
           returnToken (if equals then GreaterEqual else Greater)
-      _ -> return $ throwError (LoxError line "Unexpected character.")
+      '/' -> do
+        comment <- match '/'
+        if comment
+          then do
+            _ <- advanceWhile (/= '\n')
+            return $ lift Nothing
+          else returnToken Slash
+      ' ' -> return $ lift Nothing
+      '\r' -> return $ lift Nothing
+      '\t' -> return $ lift Nothing
+      '\n' -> do
+        modify $ \s -> s {inputPos = (inputPos s) {inputLine = line + 1}}
+        return $ lift Nothing
+      '"' -> parseString
+      c ->
+        if isDigit c
+          then parseDigit
+          else return $ throwError (LoxError line "Unexpected character.")
   s <- get
   return $ createToken s <$> tokenType
   where
@@ -152,6 +209,10 @@ match expected = do
 peek :: InputState -> Char
 peek inputState@(InputState source (InputPos _ current _)) =
   if isOver inputState then '\0' else source !! current
+
+peekNext :: InputState -> Char
+peekNext inputState@(InputState source (InputPos _ current _)) =
+  if isOver inputState then '\0' else source !! (current + 1)
 
 isOver :: InputState -> Bool
 isOver s = length (source s) <= current (inputPos s)
