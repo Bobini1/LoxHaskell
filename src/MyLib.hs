@@ -5,14 +5,15 @@ module MyLib (run) where
 import Control.Monad.State
 
 run :: String -> IO ()
-run str = do
-  let results = evalState scanTokens (defaultInput str)
+run str =
   mapM_
     ( \case
         Left err -> print err
         Right token -> print token
     )
     results
+  where
+    results = evalState scanTokens (defaultInput str)
 
 data TokenType
   = LeftParen
@@ -153,10 +154,9 @@ setStartToCurrent :: State InputState ()
 setStartToCurrent = do
   (InputState source (InputPos _ current inputLine)) <- get
   put $ InputState source (InputPos current current inputLine)
-  
 
 scanTokens :: State InputState [Either LoxError Token]
-scanTokens = do
+scanTokens =
   loop False []
   where
     loop over tokens = do
