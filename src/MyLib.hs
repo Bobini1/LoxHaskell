@@ -136,8 +136,7 @@ scanToken = do
             equals <- match '='
             returnToken (if equals then GreaterEqual else Greater)
         _ -> return $ throwError (LoxError line "Unexpected character.")
-    ) ::
-      State InputState (ExceptT LoxError Maybe TokenType)
+    )
   state' <- get
   return $ createToken state' <$> tokenType
   where
