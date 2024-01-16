@@ -108,35 +108,34 @@ scanToken = do
   state <- get
   let line = inputLine $ inputPos state
   tokenType <-
-    ( case c of
-        '(' -> returnToken LeftParen
-        ')' -> returnToken RightParen
-        '{' -> returnToken LeftBrace
-        '}' -> returnToken RightBrace
-        ',' -> returnToken Comma
-        '.' -> returnToken Dot
-        '-' -> returnToken Minus
-        '+' -> returnToken Plus
-        ';' -> returnToken Semicolon
-        '*' -> returnToken Star
-        '!' ->
-          do
-            equals <- match '='
-            returnToken (if equals then BangEqual else Bang)
-        '=' ->
-          do
-            equals <- match '='
-            returnToken (if equals then EqualEqual else Equal)
-        '<' ->
-          do
-            equals <- match '='
-            returnToken (if equals then LessEqual else Less)
-        '>' ->
-          do
-            equals <- match '='
-            returnToken (if equals then GreaterEqual else Greater)
-        _ -> return $ throwError (LoxError line "Unexpected character.")
-    )
+    case c of
+      '(' -> returnToken LeftParen
+      ')' -> returnToken RightParen
+      '{' -> returnToken LeftBrace
+      '}' -> returnToken RightBrace
+      ',' -> returnToken Comma
+      '.' -> returnToken Dot
+      '-' -> returnToken Minus
+      '+' -> returnToken Plus
+      ';' -> returnToken Semicolon
+      '*' -> returnToken Star
+      '!' ->
+        do
+          equals <- match '='
+          returnToken (if equals then BangEqual else Bang)
+      '=' ->
+        do
+          equals <- match '='
+          returnToken (if equals then EqualEqual else Equal)
+      '<' ->
+        do
+          equals <- match '='
+          returnToken (if equals then LessEqual else Less)
+      '>' ->
+        do
+          equals <- match '='
+          returnToken (if equals then GreaterEqual else Greater)
+      _ -> return $ throwError (LoxError line "Unexpected character.")
   state' <- get
   return $ createToken state' <$> tokenType
   where
