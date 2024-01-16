@@ -101,22 +101,59 @@ scanToken = do
   c <- advance
   state <- get
   let line = inputLine $ inputPos state
-  return $ scan state c line
+  scan c line
   where
-    scan state c line = do
-      tokenType <- case c of
-        '(' -> Right LeftParen
-        ')' -> Right RightParen
-        '{' -> Right LeftBrace
-        '}' -> Right RightBrace
-        ',' -> Right Comma
-        '.' -> Right Dot
-        '-' -> Right Minus
-        '+' -> Right Plus
-        ';' -> Right Semicolon
-        '*' -> Right Star
-        _ -> Left $ LoxError line "Unexpected character."
-      return $ createToken state tokenType
+    scan c line = do
+      tokenType <-
+        ( case c of
+            '(' -> return $ Right LeftParen
+            ')' -> return $ Right RightParen
+            '{' -> return $ Right LeftBrace
+            '}' -> return $ Right RightBrace
+            ',' -> return $ Right Comma
+            '.' -> return $ Right Dot
+            '-' -> return $ Right Minus
+            '+' -> return $ Right Plus
+            ';' -> return $ Right Semicolon
+            '*' -> return $ Right Star
+            '!' ->
+              do
+                equals <- match '='
+                return $ Right (if equals then BangEqual else Bang)
+            '=' ->
+              do
+                equals <- match '='
+                return $ Right (if equals then EqualEqual else Equal)
+            '<' ->
+              do
+                equals <- match '='
+                return $ Right (if equals then LessEqual else Less)
+            '>' ->
+              do
+                equals <- match '='
+                return $ Right (if equals then GreaterEqual else Greater)
+            _ -> return $ Left $ LoxError line "Unexpected character."
+          )
+      state <- get
+      return $ createToken state <$> tokenType
+
+match :: Char -> State InputState Bool
+match expected = do
+  state <- get
+  if isOver state || (source state !! current (inputPos state) /= expected)
+    then return False
+    else do
+      _ <- advance
+      return True
+
+isOver :: InputState -> Bool
+isOver state = length (source state) <= current (inputPos state)
+
+setStartToCurrent :: State InputState ()
+setStartToCurrent = do
+  (InputState source (InputPos _ current inputLine)) <- get
+  put $ InputState source (InputPos current current inputLine)
+  
 
 scanTokens :: State InputState [Either LoxError Token]
 scanTokens = do
@@ -126,7 +163,7 @@ scanTokens = do
       if over
         then return tokens
         else do
+          setStartToCurrent
           token <- scanToken
           state <- get
           loop (isOver state) (token : tokens)
-    isOver state = length (source state) <= current (inputPos state)
