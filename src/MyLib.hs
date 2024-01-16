@@ -150,7 +150,8 @@ match expected = do
       return True
 
 peek :: InputState -> Char
-peek inputState@(InputState source (InputPos _ current _)) = if isOver inputState then '\0' else source !! current
+peek inputState@(InputState source (InputPos _ current _)) =
+  if isOver inputState then '\0' else source !! current
 
 isOver :: InputState -> Bool
 isOver s = length (source s) <= current (inputPos s)
