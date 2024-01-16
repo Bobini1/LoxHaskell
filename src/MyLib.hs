@@ -156,10 +156,9 @@ peek inputState@(InputState source (InputPos _ current _)) =
 isOver :: InputState -> Bool
 isOver s = length (source s) <= current (inputPos s)
 
-setStartToCurrent :: State InputState ()
-setStartToCurrent = do
-  (InputState source (InputPos _ current inputLine)) <- get
-  put $ InputState source (InputPos current current inputLine)
+setStartToCurrent :: InputState -> InputState
+setStartToCurrent (InputState source (InputPos _ current inputLine)) =
+  InputState source (InputPos current current inputLine)
 
 scanTokens :: State InputState [Either LoxError Token]
 scanTokens = do
@@ -167,7 +166,7 @@ scanTokens = do
   if over
     then return []
     else do
-      setStartToCurrent
+      modify setStartToCurrent
       token <- scanToken
       tokens <- scanTokens
       case runExceptT token of
