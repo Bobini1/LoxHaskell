@@ -105,8 +105,7 @@ type TokenResult = ExceptT LoxError Maybe Token
 scanToken :: State InputState TokenResult
 scanToken = do
   c <- advance
-  state <- get
-  let line = inputLine $ inputPos state
+  line <- gets $ inputLine . inputPos
   tokenType <-
     case c of
       '(' -> returnToken LeftParen
@@ -136,25 +135,25 @@ scanToken = do
           equals <- match '='
           returnToken (if equals then GreaterEqual else Greater)
       _ -> return $ throwError (LoxError line "Unexpected character.")
-  state' <- get
-  return $ createToken state' <$> tokenType
+  s <- get
+  return $ createToken s <$> tokenType
   where
     returnToken = return . lift . return
 
 match :: Char -> State InputState Bool
 match expected = do
-  state <- get
-  if isOver state || (source state !! current (inputPos state) /= expected)
+  s <- get
+  if isOver s || (source s !! current (inputPos s) /= expected)
     then return False
     else do
       _ <- advance
       return True
 
 peek :: InputState -> Char
-peek (InputState source (InputPos _ current _)) = source !! current
+peek inputState@(InputState source (InputPos _ current _)) = if isOver inputState then '\0' else source !! current
 
 isOver :: InputState -> Bool
-isOver state = length (source state) <= current (inputPos state)
+isOver s = length (source s) <= current (inputPos s)
 
 setStartToCurrent :: State InputState ()
 setStartToCurrent = do
