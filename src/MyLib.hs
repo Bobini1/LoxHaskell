@@ -2,6 +2,7 @@
 
 module MyLib (run) where
 
+import Control.Monad.Except
 import Control.Monad.State
 
 run :: String -> IO ()
@@ -97,46 +98,50 @@ data LoxError = LoxError
   }
   deriving (Read, Show, Eq)
 
-scanToken :: State InputState (Either LoxError Token)
+type TokenResult = ExceptT LoxError Maybe Token
+
+-- type TokenResult = MaybeT (Either LoxError) Token
+
+scanToken :: State InputState TokenResult
 scanToken = do
   c <- advance
   state <- get
   let line = inputLine $ inputPos state
-  scan c line
+  tokenType <-
+    ( case c of
+        '(' -> returnToken LeftParen
+        ')' -> returnToken RightParen
+        '{' -> returnToken LeftBrace
+        '}' -> returnToken RightBrace
+        ',' -> returnToken Comma
+        '.' -> returnToken Dot
+        '-' -> returnToken Minus
+        '+' -> returnToken Plus
+        ';' -> returnToken Semicolon
+        '*' -> returnToken Star
+        '!' ->
+          do
+            equals <- match '='
+            returnToken (if equals then BangEqual else Bang)
+        '=' ->
+          do
+            equals <- match '='
+            returnToken (if equals then EqualEqual else Equal)
+        '<' ->
+          do
+            equals <- match '='
+            returnToken (if equals then LessEqual else Less)
+        '>' ->
+          do
+            equals <- match '='
+            returnToken (if equals then GreaterEqual else Greater)
+        _ -> return $ throwError (LoxError line "Unexpected character.")
+    ) ::
+      State InputState (ExceptT LoxError Maybe TokenType)
+  state' <- get
+  return $ createToken state' <$> tokenType
   where
-    scan c line = do
-      tokenType <-
-        ( case c of
-            '(' -> return $ Right LeftParen
-            ')' -> return $ Right RightParen
-            '{' -> return $ Right LeftBrace
-            '}' -> return $ Right RightBrace
-            ',' -> return $ Right Comma
-            '.' -> return $ Right Dot
-            '-' -> return $ Right Minus
-            '+' -> return $ Right Plus
-            ';' -> return $ Right Semicolon
-            '*' -> return $ Right Star
-            '!' ->
-              do
-                equals <- match '='
-                return $ Right (if equals then BangEqual else Bang)
-            '=' ->
-              do
-                equals <- match '='
-                return $ Right (if equals then EqualEqual else Equal)
-            '<' ->
-              do
-                equals <- match '='
-                return $ Right (if equals then LessEqual else Less)
-            '>' ->
-              do
-                equals <- match '='
-                return $ Right (if equals then GreaterEqual else Greater)
-            _ -> return $ Left $ LoxError line "Unexpected character."
-          )
-      state <- get
-      return $ createToken state <$> tokenType
+    returnToken = return . lift . return
 
 match :: Char -> State InputState Bool
 match expected = do
@@ -147,6 +152,9 @@ match expected = do
       _ <- advance
       return True
 
+peek :: InputState -> Char
+peek (InputState source (InputPos _ current _)) = source !! current
+
 isOver :: InputState -> Bool
 isOver state = length (source state) <= current (inputPos state)
 
@@ -156,14 +164,14 @@ setStartToCurrent = do
   put $ InputState source (InputPos current current inputLine)
 
 scanTokens :: State InputState [Either LoxError Token]
-scanTokens =
-  loop False []
-  where
-    loop over tokens = do
-      if over
-        then return tokens
-        else do
-          setStartToCurrent
-          token <- scanToken
-          state <- get
-          loop (isOver state) (token : tokens)
+scanTokens = do
+  over <- gets isOver
+  if over
+    then return ([] :: [Either LoxError Token])
+    else do
+      setStartToCurrent
+      token <- scanToken
+      tokens <- scanTokens
+      case runExceptT token of
+        Nothing -> return tokens
+        Just token' -> return $ token' : tokens
