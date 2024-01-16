@@ -167,7 +167,7 @@ scanTokens :: State InputState [Either LoxError Token]
 scanTokens = do
   over <- gets isOver
   if over
-    then return ([] :: [Either LoxError Token])
+    then return []
     else do
       setStartToCurrent
       token <- scanToken
