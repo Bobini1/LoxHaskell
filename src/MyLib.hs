@@ -66,26 +66,21 @@ data Token = Token
   }
   deriving (Read, Show, Eq)
 
-data InputPos = InputPos
-  { start :: Int,
-    current :: Int,
-    inputLine :: Int
+data InputState = InputState
+  { source :: String,
+    inputLine :: Int,
+    current :: String
   }
   deriving (Read, Show, Eq)
 
-data InputState = InputState
-  { source :: String,
-    inputPos :: InputPos
-  }
-
 defaultInput :: String -> InputState
-defaultInput source = InputState source (InputPos 0 0 1)
+defaultInput source = InputState source 1 ""
 
 advance :: State InputState Char
 advance = do
-  (InputState source (InputPos start current inputLine)) <- get
-  put $ InputState source (InputPos start (current + 1) inputLine)
-  return $ source !! current
+  (InputState source inputLine current) <- get
+  put $ InputState (tail source) inputLine (head source : current)
+  return $ head source
 
 advanceWhile :: (Char -> Bool) -> State InputState ()
 advanceWhile predicate = do
@@ -95,16 +90,15 @@ advanceWhile predicate = do
     else do
       when
         (peek s == '\n')
-        (modify $ \st -> st {inputPos = (inputPos st) {inputLine = inputLine (inputPos st) + 1}})
+        (modify $ \st -> st {inputLine = inputLine st + 1})
       _ <- advance
       advanceWhile predicate
 
 currentLexeme :: InputState -> String
-currentLexeme (InputState source (InputPos start current _)) =
-  take (current - start) $ drop start source
+currentLexeme s = reverse $ current s
 
 createToken :: InputState -> TokenType -> Token
-createToken inputState@(InputState _ (InputPos _ _ inputLine)) tokenType =
+createToken inputState@(InputState _ inputLine _) tokenType =
   let text = currentLexeme inputState
    in Token tokenType text inputLine
 
@@ -120,13 +114,13 @@ parseString :: State InputState (ExceptT LoxError Maybe TokenType)
 parseString = do
   _ <- advanceWhile (/= '"')
   eof <- gets isOver
-  line <- gets $ inputLine . inputPos
+  line <- gets inputLine
   if eof
     then return $ throwError (LoxError line "Unterminated string.")
     else do
       _ <- advance
       lexeme <- gets currentLexeme
-      return . lift . return $ SString (drop 1 $ take (length lexeme - 1) lexeme)
+      return . lift . return $ SString (init . tail $ lexeme)
 
 parseDigit :: State InputState (ExceptT LoxError Maybe TokenType)
 parseDigit = do
@@ -169,7 +163,7 @@ parseIdentifier = do
 scanToken :: State InputState TokenResult
 scanToken = do
   c <- advance
-  line <- gets $ inputLine . inputPos
+  line <- gets inputLine
   tokenType <-
     case c of
       '(' -> returnToken LeftParen
@@ -209,7 +203,7 @@ scanToken = do
       '\r' -> return $ lift Nothing
       '\t' -> return $ lift Nothing
       '\n' -> do
-        modify $ \s -> s {inputPos = (inputPos s) {inputLine = line + 1}}
+        modify $ \s -> s {inputLine = inputLine s + 1}
         return $ lift Nothing
       '"' -> parseString
       _ -> parseOther c line
@@ -225,26 +219,26 @@ scanToken = do
 match :: Char -> State InputState Bool
 match expected = do
   s <- get
-  if isOver s || (source s !! current (inputPos s) /= expected)
+  if isOver s || head (source s) /= expected
     then return False
     else do
       _ <- advance
       return True
 
 peek :: InputState -> Char
-peek inputState@(InputState source (InputPos _ current _)) =
-  if isOver inputState then '\0' else source !! current
+peek inputState@(InputState source _ _) =
+  if isOver inputState then '\0' else head source
 
 peekNext :: InputState -> Char
-peekNext inputState@(InputState source (InputPos _ current _)) =
-  if isOver inputState then '\0' else source !! (current + 1)
+peekNext inputState@(InputState source _ _) =
+  if isOver inputState then '\0' else head (tail source)
 
 isOver :: InputState -> Bool
-isOver s = length (source s) <= current (inputPos s)
+isOver s = null $ source s
 
-setStartToCurrent :: InputState -> InputState
-setStartToCurrent (InputState source (InputPos _ current inputLine)) =
-  InputState source (InputPos current current inputLine)
+resetCurrent :: InputState -> InputState
+resetCurrent (InputState source inputLine _) =
+  InputState source inputLine ""
 
 scanTokens :: State InputState [Either LoxError Token]
 scanTokens = do
@@ -252,7 +246,7 @@ scanTokens = do
   if over
     then return []
     else do
-      modify setStartToCurrent
+      modify resetCurrent
       token <- scanToken
       tokens <- scanTokens
       case runExceptT token of
