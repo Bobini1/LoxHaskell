@@ -4,7 +4,7 @@ module MyLib (run) where
 
 import Control.Monad.Except
 import Control.Monad.State
-import Data.Char (isDigit)
+import Data.Char (isAlpha, isAlphaNum, isDigit)
 
 run :: String -> IO ()
 run str =
@@ -95,7 +95,7 @@ advanceWhile predicate = do
     else do
       when
         (peek s == '\n')
-        (modify $ \s -> s {inputPos = (inputPos s) {inputLine = inputLine (inputPos s) + 1}})
+        (modify $ \st -> st {inputPos = (inputPos st) {inputLine = inputLine (inputPos st) + 1}})
       _ <- advance
       advanceWhile predicate
 
@@ -104,7 +104,7 @@ currentLexeme (InputState source (InputPos start current _)) =
   take (current - start) $ drop start source
 
 createToken :: InputState -> TokenType -> Token
-createToken inputState@(InputState source (InputPos start current inputLine)) tokenType =
+createToken inputState@(InputState _ (InputPos _ _ inputLine)) tokenType =
   let text = currentLexeme inputState
    in Token tokenType text inputLine
 
@@ -141,6 +141,30 @@ parseDigit = do
     )
   lexeme <- gets currentLexeme
   return . lift . return $ Number (read lexeme)
+
+parseIdentifier :: State InputState (ExceptT LoxError Maybe TokenType)
+parseIdentifier = do
+  _ <- advanceWhile isAlphaNum
+  lexeme <- gets currentLexeme
+  return . lift . return $
+    case lexeme of
+      "and" -> And
+      "class" -> Class
+      "else" -> Else
+      "false" -> BFalse
+      "for" -> For
+      "fun" -> Fun
+      "if" -> If
+      "nil" -> Nil
+      "or" -> Or
+      "print" -> Print
+      "return" -> Return
+      "super" -> Super
+      "this" -> This
+      "true" -> BTrue
+      "var" -> Var
+      "while" -> While
+      _ -> Identifier
 
 scanToken :: State InputState TokenResult
 scanToken = do
@@ -188,14 +212,15 @@ scanToken = do
         modify $ \s -> s {inputPos = (inputPos s) {inputLine = line + 1}}
         return $ lift Nothing
       '"' -> parseString
-      c ->
-        if isDigit c
-          then parseDigit
-          else return $ throwError (LoxError line "Unexpected character.")
+      _ -> parseOther c line
   s <- get
   return $ createToken s <$> tokenType
   where
     returnToken = return . lift . return
+    parseOther c line
+      | isDigit c = parseDigit
+      | isAlpha c = parseIdentifier
+      | otherwise = return $ throwError (LoxError line "Unexpected character.")
 
 match :: Char -> State InputState Bool
 match expected = do
